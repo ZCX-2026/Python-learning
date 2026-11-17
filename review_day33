@@ -1,0 +1,186 @@
+# RoboCup 2D 足球仿真 · 环境搭建记录
+
+*2026-11-17 完成，用于 11/21 工坊现场演示*
+
+---
+
+## 一、最终成果
+
+```
+✅ Ubuntu 24.04 虚拟机
+✅ rcssserver 19.0.0（服务器）编译安装
+✅ rcssmonitor 19.0.1（可视化）编译安装
+✅ 球场 + 22 个球员 + before_kick_off 状态 = 演示标准
+✅ 一键启动脚本 start.sh
+```
+
+---
+
+## 二、宿主机环境
+
+| 项 | 配置 |
+|---|---|
+| CPU | Intel Core Ultra 5 225H（14 核） |
+| 内存 | 32 GB |
+| 磁盘 | 1 TB |
+| 虚拟机软件 | VirtualBox 7.2.22 |
+| 虚拟机配置 | 8 GB 内存 / 4 核 / 40 GB 磁盘（放 D 盘） |
+
+---
+
+## 三、搭建步骤
+
+### 1. 装 Ubuntu 24.04
+
+- 镜像：`ubuntu-24.04.5.1-desktop-amd64.iso`（**桌面版**，不是 server 版）
+- 清华镜像：`mirrors.tuna.tsinghua.edu.cn/ubuntu-releases/24.04/`
+- VirtualBox 新建虚拟机时：**勾选「跳过自动安装」**，手动装
+- 显示设置：**显存 256 MB + 启用 3D 加速**（否则 Ubuntu 24.04 黑屏）
+
+### 2. 装编译依赖
+
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake git flex bison libboost-all-dev zlib1g-dev
+```
+
+### 3. 编译 rcssserver
+
+```bash
+cd ~
+git clone https://github.com/rcsoccersim/rcssserver.git
+cd rcssserver
+git checkout rcssserver-19.0.0
+mkdir build
+cd build
+cmake ..
+make -j4
+sudo make install
+```
+
+### 4. 编译 rcssmonitor
+
+```bash
+sudo apt install -y qtbase5-dev
+
+cd ~
+git clone https://github.com/rcsoccersim/rcssmonitor.git
+cd rcssmonitor
+mkdir build
+cd build
+cmake ..
+make -j4
+sudo make install
+```
+
+### 5. 关键一步：让系统找到动态库
+
+```bash
+sudo ldconfig
+```
+
+> 不做这一步会报 `librcssrcg.so.18: cannot open shared object file`
+
+### 6. 跑起来验证
+
+```bash
+rcssserver        # 终端 1，保持运行
+rcssmonitor       # 终端 2
+```
+
+看到绿色球场 + 22 个球员 + `before_kick_off` = 成功。
+
+---
+
+## 四、一键启动脚本
+
+`~/start.sh`：
+
+```bash
+#!/bin/bash
+pkill rcssserver 2>/dev/null
+pkill rcssmonitor 2>/dev/null
+pkill -f players.py 2>/dev/null
+sleep 1
+
+rcssserver &
+sleep 2
+rcssmonitor &
+```
+
+运行：
+
+```bash
+bash start.sh
+```
+
+---
+
+## 五、演示标准（对照群里的图）
+
+| 画面元素 | 说明 |
+|---|---|
+| 标题 `rcssmonitor 19.0.1` | 可视化程序起来了 |
+| 绿色球场、中线、禁区、球门 | 服务器在跑 |
+| 顶部 22 个球员图标（两边各 11） | 服务器默认站位 |
+| 底部 `0:0  before_kick_off  0` | 比赛未开始 |
+
+**重要发现**：这 22 个球员是 **server + monitor 自带的默认站位**，不需要真的客户端连上去。
+（我额外写了个 Python 客户端 `players.py` 做实验，演示用不上，但可以展示"球员怎么连进来"。）
+
+---
+
+## 六、今天踩过的坑（全部真踩过）
+
+| # | 坑 | 解决 |
+|---|---|---|
+| 1 | ISO 双击打不开 | ISO 不是安装程序，要用虚拟机挂载 |
+| 2 | VirtualBox 无人值守安装失败 | 新建虚拟机时勾「跳过自动安装」 |
+| 3 | 下载了 server 版 ISO | 要 **desktop** 版，否则没有图形界面 |
+| 4 | 开机黑屏 | 显存 256 MB + **启用 3D 加速** |
+| 5 | `clone` 报权限不够 | URL 里有**空格**，git 把路径当本地目录了 |
+| 6 | `for i in range(11)` 报 SyntaxError | 少了**冒号** |
+| 7 | `threading.thread` 报 AttributeError | 要大写 **Thread** |
+| 8 | `socket.creat_connection` 报错 | 少个 e，应为 **create_connection** |
+| 9 | `ls` 报"命令未找到" | 打成了大写 `Is`，**大小写敏感** |
+| 10 | `librcssrcg.so.18` 找不到 | `sudo ldconfig` |
+| 11 | Connection refused | 服务器没起，或顺序错了（server → monitor） |
+| 12 | 粘贴不了 | 需要增强工具 + `Ctrl+Shift+V`（不是 Ctrl+V） |
+
+**排查口诀：拼写 → 大小写 → 空格。**
+
+---
+
+## 七、常用命令速查
+
+```bash
+# 启动
+bash start.sh
+
+# 单独启动
+rcssserver
+rcssmonitor
+
+# 查端口
+ss -tln | grep 6000
+
+# 查进程
+ps aux | grep rcssserver
+
+# 杀进程
+pkill rcssserver
+pkill rcssmonitor
+```
+
+---
+
+## 八、参考
+
+- 赛事规则：`2026 年 RoboCup 足球机器人比赛（仿真 2D 组）赛事规则`
+- 规定环境：**Linux（Ubuntu 24.04 64 位）** + **rcssserver-19.0.x**
+- 技术委员会：方宝富（合肥工业大学）
+- 竞赛 QQ 群：1048922753
+
+---
+
+*下一步：11/21（周六）14:00-16:00 到工坊现场演示环境配置。*
